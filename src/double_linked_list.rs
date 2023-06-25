@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::fmt::{self, Debug};
 use std::hash::{Hash, Hasher};
-use std::mem::{replace, transmute};
+use std::mem::{replace, swap, transmute};
 use std::rc::{Rc, Weak};
 
 /// 双链表
@@ -538,13 +538,79 @@ pub trait MergeSort {
 }
 
 impl<T: PartialOrd + Default> LinkedList<T> {
-    // 你可以在这里添加你需要的辅助函数
+    fn pop_front_raw(&mut self) -> Option<Rc<RefCell<Node<T>>>> {
+        self.len -= 1;
+        // clear value & set head
+        let cur = self.head.take();
+        self.head = cur.as_ref().and_then(|x| {
+            let mut x = x.borrow_mut();
+            x.prev = Weak::new();
+            x.next.take()
+        });
+
+        // clear head
+        if let Some(head) = &self.head {
+            head.borrow_mut().prev = Weak::new()
+        }
+
+        cur
+    }
+
+    fn push_back_raw(&mut self, raw: Rc<RefCell<Node<T>>>) {
+        self.len += 1;
+        // set value
+        let mut inner = raw.borrow_mut();
+        inner.next = None;
+        inner.prev = self.tail.clone();
+        drop(inner);
+
+        match self.tail.upgrade() {
+            Some(t) => t.borrow_mut().next = Some(raw.clone()),
+            None => self.head = Some(raw.clone()),
+        }
+        self.tail = Rc::downgrade(&raw);
+    }
 }
 
 impl<T: PartialOrd + Default> MergeSort for LinkedList<T> {
     fn merge_sort(&mut self) {
-        // TODO: YOUR CODE HERE
-        unimplemented!();
+        match self.len {
+            0 | 1 => return,
+            2 => {
+                let first = self.head.clone().expect("we got this");
+                let mut first = first.borrow_mut();
+                let second = first.next.clone().expect("we got this");
+                let mut second = second.borrow_mut();
+                if first.elem > second.elem {
+                    swap(&mut first.elem, &mut second.elem)
+                }
+            }
+            _ => {
+                let mid = self.len / 2;
+                let mut left = replace(self, LinkedList::new());
+                let mut right = left.split_off(mid);
+
+                left.merge_sort();
+                right.merge_sort();
+
+                loop {
+                    let lv = left.front();
+                    let rv = right.front();
+                    match (lv, rv) {
+                        (Some(l), Some(r)) => {
+                            if l < r {
+                                self.push_back_raw(left.pop_front_raw().unwrap())
+                            } else {
+                                self.push_back_raw(right.pop_front_raw().unwrap())
+                            }
+                        }
+                        (Some(_), None) => self.push_back_raw(left.pop_front_raw().unwrap()),
+                        (None, Some(_)) => self.push_back_raw(right.pop_front_raw().unwrap()),
+                        (None, None) => break,
+                    }
+                }
+            }
+        }
     }
 }
 
