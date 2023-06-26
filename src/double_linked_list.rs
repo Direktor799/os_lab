@@ -109,7 +109,8 @@ impl<T> LinkedList<T> {
     pub fn pop_front(&mut self) -> Option<T> {
         self.head.take().map(|h| {
             self.len -= 1;
-            let h = Rc::into_inner(h)
+            let h = Rc::try_unwrap(h)
+                .ok()
                 .expect("this should be the last ref")
                 .into_inner();
             self.head = h.next;
@@ -129,12 +130,13 @@ impl<T> LinkedList<T> {
     pub fn pop_back(&mut self) -> Option<T> {
         self.tail.upgrade().map(|t| {
             self.len -= 1;
-            // drop strong ref, so we could call `Rc::into_inner`.
+            // drop strong ref, so we could call `Rc::try_unwrap`.
             match t.borrow().prev.upgrade() {
                 Some(x) => x.borrow_mut().next = None,
                 None => self.head = None,
             }
-            let t = Rc::into_inner(t)
+            let t = Rc::try_unwrap(t)
+                .ok()
                 .expect("this should be the last ref")
                 .into_inner();
             self.tail = t.prev;
@@ -358,7 +360,8 @@ impl<T> LinkedList<T> {
 
         // destroy cur
         drop(inner);
-        let inner = Rc::into_inner(cur)
+        let inner = Rc::try_unwrap(cur)
+            .ok()
             .expect("this should be the last ref")
             .into_inner();
 
